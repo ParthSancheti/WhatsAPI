@@ -2,7 +2,7 @@ const express = require('express');
 const { Client, RemoteAuth } = require('whatsapp-web.js');
 const { MongoStore } = require('wwebjs-mongo');
 const mongoose = require('mongoose');
-const qrcode = require('qrcode'); // Replaced the terminal version with the image version
+const qrcode = require('qrcode'); 
 const puppeteer = require('puppeteer');
 
 const MONGODB_URI = "mongodb+srv://parthsancheti5_db_user:QAFiwE6UbV1l7VxT@cluster0.nkozhdg.mongodb.net/?retryWrites=true&w=majority";
@@ -10,7 +10,6 @@ const MONGODB_URI = "mongodb+srv://parthsancheti5_db_user:QAFiwE6UbV1l7VxT@clust
 const app = express();
 app.use(express.json());
 
-// This holds the HTML we will show on your webpage
 let qrHtml = "<h2 style='text-align:center; margin-top:50px; font-family:sans-serif;'>QR Code is generating... please refresh this page in 10 seconds.</h2>";
 
 async function startCloudBot() {
@@ -20,14 +19,19 @@ async function startCloudBot() {
 
     const store = new MongoStore({ mongoose: mongoose });
 
-    console.log("Booting Chrome in the Cloud...");
+    console.log("Hunting for Chrome in the Cloud...");
+    
+    // FIX: Added the magic 'await' back so it finds the real path, not a Promise!
+    const browserPath = process.env.PUPPETEER_EXECUTABLE_PATH || (await puppeteer.executablePath());
+    console.log("Chrome locked in at: " + browserPath);
+
     const client = new Client({
         authStrategy: new RemoteAuth({
             store: store,
             backupSyncIntervalMs: 300000 
         }),
         puppeteer: {
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath(),
+            executablePath: browserPath,
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
         }
     });
@@ -35,7 +39,6 @@ async function startCloudBot() {
     client.on('qr', async (qr) => {
         console.log(">>> NEW QR CODE READY! Open your Render URL to see it. <<<");
         try {
-            // Converts the QR data into a real image!
             const qrImage = await qrcode.toDataURL(qr);
             qrHtml = `
                 <div style="text-align:center; margin-top:50px; font-family:sans-serif;">
@@ -55,11 +58,9 @@ async function startCloudBot() {
 
     client.on('ready', () => {
         console.log('🚀 WhatsApp Bot is locked in and ready for commands!');
-        // Update the webpage so you know it worked
         qrHtml = "<h2 style='text-align:center; color:green; margin-top:50px; font-family:sans-serif;'>✅ Bot is successfully connected to your phone! You can close this page.</h2>";
     });
 
-    // When you visit your Render URL, this serves the QR Code image
     app.get('/', (req, res) => {
         res.send(qrHtml);
     });
