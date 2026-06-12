@@ -1,4 +1,4 @@
-FROM node:18
+FROM node:20
 
 # Install the exact Linux graphics libraries Chrome needs to boot
 RUN apt-get update && apt-get install -y \
