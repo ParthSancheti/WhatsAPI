@@ -1,47 +1,54 @@
 const express = require('express');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
-const puppeteer = require('puppeteer'); // <-- Added this
+const puppeteer = require('puppeteer');
 
 const app = express();
 app.use(express.json());
 
-// Initialize WhatsApp Web with Puppeteer settings for the cloud
-const client = new Client({
-    authStrategy: new LocalAuth(),
-    puppeteer: {
-        executablePath: puppeteer.executablePath(), // <-- Forces it to use the exact Chrome Render just installed
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-    }
-});
+// Wrap the bot in an async function so it can 'await' the Chrome path
+async function startBot() {
+    // 1. Wait for Puppeteer to actually find the Chrome path
+    const browserPath = await puppeteer.executablePath();
+    console.log("Chrome locked in at:", browserPath);
 
-client.on('qr', (qr) => {
-    // This logs the QR code to the Render console
-    qrcode.generate(qr, { small: true });
-    console.log("SCAN THE QR CODE ABOVE WITH YOUR PHONE");
-});
+    // 2. Boot the WhatsApp Client
+    const client = new Client({
+        authStrategy: new LocalAuth(),
+        puppeteer: {
+            executablePath: browserPath,
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        }
+    });
 
-client.on('ready', () => {
-    console.log('WhatsApp Bot is locked in and ready!');
-});
+    client.on('qr', (qr) => {
+        qrcode.generate(qr, { small: true });
+        console.log("\n>>> SCAN THE QR CODE ABOVE WITH YOUR PHONE <<<\n");
+    });
 
-// The endpoint Google Apps Script will talk to
-app.post('/send', async (req, res) => {
-    const { number, message } = req.body;
-    const chatId = number + "@c.us";
-    
-    try {
-        await client.sendMessage(chatId, message);
-        console.log(`Message sent to ${number}`);
-        res.status(200).send({ status: 'Success' });
-    } catch (error) {
-        console.error(`Error sending to ${number}:`, error);
-        res.status(500).send({ error: 'Failed to send' });
-    }
-});
+    client.on('ready', () => {
+        console.log('WhatsApp Bot is locked in and ready!');
+    });
 
-client.initialize();
+    app.post('/send', async (req, res) => {
+        const { number, message } = req.body;
+        const chatId = number + "@c.us";
+        
+        try {
+            await client.sendMessage(chatId, message);
+            console.log(`Message sent to ${number}`);
+            res.status(200).send({ status: 'Success' });
+        } catch (error) {
+            console.error(`Error sending to ${number}:`, error);
+            res.status(500).send({ error: 'Failed to send' });
+        }
+    });
 
-// Render uses the process.env.PORT variable
+    client.initialize();
+}
+
+// Start the engine
+startBot();
+
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`Server running on port ${port}`));
