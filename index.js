@@ -3,7 +3,6 @@ const { Client, RemoteAuth } = require('whatsapp-web.js');
 const { MongoStore } = require('wwebjs-mongo');
 const mongoose = require('mongoose');
 const qrcode = require('qrcode');
-const puppeteer = require('puppeteer');
 
 const MONGODB_URI = "mongodb+srv://parthsancheti5_db_user:QAFiwE6UbV1l7VxT@cluster0.nkozhdg.mongodb.net/?retryWrites=true&w=majority";
 
@@ -11,7 +10,7 @@ const app = express();
 app.use(express.json());
 
 // --- MULTI-ACCOUNT SETTINGS ---
-const ACCOUNTS = ['Code1', 'Code2']; // You can add 'Code3', etc. later
+const ACCOUNTS = ['Code1', 'Code2']; 
 const clients = new Map();
 const qrHtmlMap = new Map();
 const statusMap = new Map();
@@ -62,14 +61,15 @@ async function startMultiBot() {
     const store = new MongoStore({ mongoose: mongoose });
     console.log("> Database Connected.");
 
-    const browserPath = await puppeteer.executablePath();
+    // We know EXACTLY where Chrome is because of our Dockerfile!
+    const browserPath = '/usr/bin/google-chrome-stable';
 
     for (const account of ACCOUNTS) {
         console.log(`> Booting Node: ${account}...`);
         
         const client = new Client({
             authStrategy: new RemoteAuth({
-                clientId: account, // MongoDB will save separate sessions for Code1 and Code2!
+                clientId: account, 
                 store: store,
                 backupSyncIntervalMs: 300000 
             }),
