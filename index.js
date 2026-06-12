@@ -13,6 +13,7 @@ if (!MONGODB_URI) {
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // --- MULTI-ACCOUNT SETTINGS ---
 // Start with ONE account to confirm the pipeline works on Render's RAM.
@@ -38,6 +39,9 @@ app.get('/', (req, res) => {
             <div style="background: #111; padding: 10px; text-align: center; border: 1px dashed #333;">
                 ${qrHtmlMap.get(acc)}
             </div>
+            <form method="POST" action="/logout/${acc}" style="margin-top: 12px;" onsubmit="return confirm('Logout ${acc}? You will need to re-scan the QR to link again.');">
+                <button type="submit" style="width: 100%; padding: 8px; background: #100; color: #f55; border: 1px solid #f55; font-family: inherit; font-weight: bold; cursor: pointer; text-shadow: 0 0 4px #f55;">[ LOGOUT ${acc} ]</button>
+            </form>
         </div>
     `).join('');
 
@@ -142,6 +146,36 @@ app.post('/send', async (req, res) => {
         console.error(`> [${targetAccount}] Error sending to ${number}:`, error);
         res.status(500).send({ error: 'Failed to send' });
     }
+});
+
+// --- LOGOUT ENDPOINT ---
+app.post('/logout/:account', async (req, res) => {
+    const account = req.params.account;
+    const client = clients.get(account);
+
+    if (!client) {
+        return res.redirect('/');
+    }
+
+    try {
+        statusMap.set(account, 'LOGGING OUT...');
+        // logout() destroys the WhatsApp session (clears it from MongoDB too)
+        await client.logout();
+        console.log(`> [${account}] Logged out and session cleared.`);
+    } catch (err) {
+        console.error(`> [${account}] Logout error:`, err);
+    }
+
+    try {
+        await client.destroy();
+        await client.initialize(); // restart so a fresh QR is generated
+    } catch (err) {
+        console.error(`> [${account}] Re-init error:`, err);
+    }
+
+    statusMap.set(account, 'AWAITING SCAN');
+    qrHtmlMap.set(account, '<div style="color: yellow; padding: 30px;">[ GENERATING NEW QR... ]</div>');
+    res.redirect('/');
 });
 
 startMultiBot();
