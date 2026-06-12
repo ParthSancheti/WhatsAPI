@@ -4,13 +4,21 @@ const { MongoStore } = require('wwebjs-mongo');
 const mongoose = require('mongoose');
 const qrcode = require('qrcode');
 
-const MONGODB_URI = "mongodb+srv://parthsancheti5_db_user:QAFiwE6UbV1l7VxT@cluster0.nkozhdg.mongodb.net/?retryWrites=true&w=majority";
+const MONGODB_URI = process.env.MONGODB_URI;
+
+if (!MONGODB_URI) {
+    console.error("> FATAL: MONGODB_URI environment variable is not set.");
+    process.exit(1);
+}
 
 const app = express();
 app.use(express.json());
 
 // --- MULTI-ACCOUNT SETTINGS ---
-const ACCOUNTS = ['Code1', 'Code2']; 
+// Start with ONE account to confirm the pipeline works on Render's RAM.
+// Once Code1 reaches CONNECTED & ACTIVE, add 'Code2' back — but two Chrome
+// instances need ~1GB+, so you'll likely need a paid instance for both.
+const ACCOUNTS = ['Code1']; // ['Code1', 'Code2'];
 const clients = new Map();
 const qrHtmlMap = new Map();
 const statusMap = new Map();
@@ -84,7 +92,9 @@ async function startMultiBot() {
             try {
                 const qrImage = await qrcode.toDataURL(qr);
                 qrHtmlMap.set(account, `<img src="${qrImage}" style="width: 100%; border: 2px solid white; border-radius: 5px;" /><br><small style="color: white; margin-top:5px; display:block;">SCAN TO LINK</small>`);
-            } catch (err) {}
+            } catch (err) {
+                console.error(`> [${account}] QR generation failed:`, err);
+            }
         });
 
         client.on('remote_session_saved', () => {
