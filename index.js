@@ -2,7 +2,7 @@ const express = require('express');
 const { Client, RemoteAuth } = require('whatsapp-web.js');
 const { MongoStore } = require('wwebjs-mongo');
 const mongoose = require('mongoose');
-const qrcode = require('qrcode'); 
+const qrcode = require('qrcode');
 const puppeteer = require('puppeteer');
 
 const MONGODB_URI = "mongodb+srv://parthsancheti5_db_user:QAFiwE6UbV1l7VxT@cluster0.nkozhdg.mongodb.net/?retryWrites=true&w=majority";
@@ -10,79 +10,131 @@ const MONGODB_URI = "mongodb+srv://parthsancheti5_db_user:QAFiwE6UbV1l7VxT@clust
 const app = express();
 app.use(express.json());
 
-let qrHtml = "<h2 style='text-align:center; margin-top:50px; font-family:sans-serif;'>QR Code is generating... please refresh this page in 10 seconds.</h2>";
+// --- MULTI-ACCOUNT SETTINGS ---
+const ACCOUNTS = ['Code1', 'Code2']; // You can add 'Code3', etc. later
+const clients = new Map();
+const qrHtmlMap = new Map();
+const statusMap = new Map();
 
-async function startCloudBot() {
-    console.log("Connecting to Cloud Memory (MongoDB)...");
+// Default UI State
+ACCOUNTS.forEach(acc => {
+    statusMap.set(acc, 'BOOTING SYSTEM...');
+    qrHtmlMap.set(acc, '<div style="color: yellow; padding: 30px;">[ INITIALIZING... ]</div>');
+});
+
+// --- COMMAND LINE CONTROL DASHBOARD ---
+app.get('/', (req, res) => {
+    let grids = ACCOUNTS.map(acc => `
+        <div style="border: 1px solid #0f0; padding: 15px; background: #000; width: 300px;">
+            <h3 style="margin: 0 0 10px 0; color: #fff;">> ACCOUNT: [ ${acc} ]</h3>
+            <div style="margin-bottom: 10px;">STATUS: <span style="color: cyan;">${statusMap.get(acc)}</span></div>
+            <div style="background: #111; padding: 10px; text-align: center; border: 1px dashed #333;">
+                ${qrHtmlMap.get(acc)}
+            </div>
+        </div>
+    `).join('');
+
+    res.send(`
+        <html>
+        <head>
+            <title>UNSTUCK ENGINE HUB</title>
+            <meta http-equiv="refresh" content="3"> <style>
+                body { background-color: #050505; color: #0f0; font-family: 'Courier New', Courier, monospace; padding: 20px; }
+                h1 { border-bottom: 2px solid #0f0; padding-bottom: 10px; text-shadow: 0 0 5px #0f0; }
+                .container { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 20px; }
+            </style>
+        </head>
+        <body>
+            <h1>>_ UNSTUCK ENGINE: MULTI-NODE COMMAND HUB</h1>
+            <p>> SYSTEM LIVE. AUTO-REFRESHING DATA...</p>
+            <div class="container">
+                ${grids}
+            </div>
+        </body>
+        </html>
+    `);
+});
+
+// --- BOOT THE BOTS ---
+async function startMultiBot() {
+    console.log("> Connecting to Cloud Memory...");
     await mongoose.connect(MONGODB_URI);
-    console.log("Database connected!");
-
     const store = new MongoStore({ mongoose: mongoose });
+    console.log("> Database Connected.");
 
-    console.log("Hunting for Chrome in the Cloud...");
-    
-    // FIX: Added the magic 'await' back so it finds the real path, not a Promise!
-    const browserPath = process.env.PUPPETEER_EXECUTABLE_PATH || (await puppeteer.executablePath());
-    console.log("Chrome locked in at: " + browserPath);
+    const browserPath = await puppeteer.executablePath();
 
-    const client = new Client({
-        authStrategy: new RemoteAuth({
-            store: store,
-            backupSyncIntervalMs: 300000 
-        }),
-        puppeteer: {
-            executablePath: browserPath,
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-        }
-    });
-
-    client.on('qr', async (qr) => {
-        console.log(">>> NEW QR CODE READY! Open your Render URL to see it. <<<");
-        try {
-            const qrImage = await qrcode.toDataURL(qr);
-            qrHtml = `
-                <div style="text-align:center; margin-top:50px; font-family:sans-serif;">
-                    <h2>Scan this with WhatsApp</h2>
-                    <img src="${qrImage}" style="width:300px; height:300px; border:2px solid black; border-radius:10px; padding: 10px;" />
-                    <p style="color: #666;">If it times out and expires, just refresh this page.</p>
-                </div>
-            `;
-        } catch (err) {
-            console.error("Failed to generate QR image", err);
-        }
-    });
-
-    client.on('remote_session_saved', () => {
-        console.log('✅ Session safely stored in MongoDB!');
-    });
-
-    client.on('ready', () => {
-        console.log('🚀 WhatsApp Bot is locked in and ready for commands!');
-        qrHtml = "<h2 style='text-align:center; color:green; margin-top:50px; font-family:sans-serif;'>✅ Bot is successfully connected to your phone! You can close this page.</h2>";
-    });
-
-    app.get('/', (req, res) => {
-        res.send(qrHtml);
-    });
-
-    app.post('/send', async (req, res) => {
-        const { number, message } = req.body;
-        const chatId = number + "@c.us";
+    for (const account of ACCOUNTS) {
+        console.log(`> Booting Node: ${account}...`);
         
-        try {
-            await client.sendMessage(chatId, message);
-            console.log(`Message sent to ${number}`);
-            res.status(200).send({ status: 'Success' });
-        } catch (error) {
-            console.error(`Error sending to ${number}:`, error);
-            res.status(500).send({ error: 'Failed to send' });
-        }
-    });
+        const client = new Client({
+            authStrategy: new RemoteAuth({
+                clientId: account, // MongoDB will save separate sessions for Code1 and Code2!
+                store: store,
+                backupSyncIntervalMs: 300000 
+            }),
+            puppeteer: {
+                executablePath: browserPath,
+                args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+            }
+        });
 
-    client.initialize();
+        client.on('qr', async (qr) => {
+            statusMap.set(account, 'AWAITING SCAN');
+            try {
+                const qrImage = await qrcode.toDataURL(qr);
+                qrHtmlMap.set(account, `<img src="${qrImage}" style="width: 100%; border: 2px solid white; border-radius: 5px;" /><br><small style="color: white; margin-top:5px; display:block;">SCAN TO LINK</small>`);
+            } catch (err) {}
+        });
+
+        client.on('remote_session_saved', () => {
+            console.log(`> [${account}] Session permanently saved to MongoDB!`);
+        });
+
+        client.on('ready', () => {
+            console.log(`> [${account}] IS LOCKED IN AND READY!`);
+            statusMap.set(account, 'CONNECTED & ACTIVE');
+            qrHtmlMap.set(account, '<div style="color: #0f0; font-weight: bold; font-size: 1.2em; padding: 40px 0;">[ LINKED ]</div>');
+        });
+
+        client.on('authenticated', () => {
+            statusMap.set(account, 'AUTHENTICATING...');
+            qrHtmlMap.set(account, '<div style="color: yellow; padding: 30px;">[ PROCESSING... ]</div>');
+        });
+
+        client.initialize();
+        clients.set(account, client);
+        
+        // Wait 4 seconds before booting the next account to protect server RAM
+        await new Promise(resolve => setTimeout(resolve, 4000));
+    }
 }
 
-startCloudBot();
+// --- APPS SCRIPT API ENDPOINT ---
+app.post('/send', async (req, res) => {
+    const { number, message, account } = req.body;
+    
+    // Default to Code1 if your Apps Script doesn't specify an account
+    const targetAccount = account || 'Code1'; 
+    const client = clients.get(targetAccount);
+
+    if (!client || statusMap.get(targetAccount) !== 'CONNECTED & ACTIVE') {
+        return res.status(400).send({ error: `Account ${targetAccount} is not linked or ready.` });
+    }
+
+    const chatId = number + "@c.us";
+    
+    try {
+        await client.sendMessage(chatId, message);
+        console.log(`> [${targetAccount}] Message sent to ${number}`);
+        res.status(200).send({ status: 'Success', account: targetAccount });
+    } catch (error) {
+        console.error(`> [${targetAccount}] Error sending to ${number}:`, error);
+        res.status(500).send({ error: 'Failed to send' });
+    }
+});
+
+startMultiBot();
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`Server running on port ${port}`));
+app.listen(port, () => console.log(`> Terminal Server running on port ${port}`));
